@@ -15010,11 +15010,13 @@ license = stdenv.lib.licenses.mit;
 , cardano-sl-delegation
 , cardano-sl-ssc
 , cpphs
-, cryptonite
+, cryptonite-openssl
 , hedgehog
+, pvss
 , stdenv
 , time-units
 , universum
+, vector
 }:
 mkDerivation {
 
@@ -15032,9 +15034,12 @@ cardano-sl-crypto-test
 cardano-sl-delegation
 cardano-sl-ssc
 cryptonite
+cryptonite-openssl
 hedgehog
+pvss
 time-units
 universum
+vector
 ];
 libraryToolDepends = [
 cpphs
