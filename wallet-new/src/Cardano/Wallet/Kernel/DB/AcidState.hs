@@ -34,15 +34,17 @@ import           Universum
 
 import           Control.Lens.TH (makeLenses)
 
+import           Formatting ((%), sformat, build)
+
 import           Data.Acid (Query, Update, makeAcidic)
 import qualified Data.Map.Strict as Map
 import           Data.SafeCopy (base, deriveSafeCopy)
 
 import qualified Pos.Core as Core
 import           Pos.Txp (Utxo)
-import           Pos.Util.Chrono (OldestFirst(..))
+import           Pos.Core.Chrono (OldestFirst(..))
 
-import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock)
+import           Cardano.Wallet.Kernel.PrefilterTx (AddrWithId, PrefilteredBlock (..), PrefilteredUtxo)
 
 import           Cardano.Wallet.Kernel.DB.BlockMeta
 import           Cardano.Wallet.Kernel.DB.HdWallet
@@ -119,28 +121,37 @@ newPending accountId tx = runUpdate' . zoom dbHdWallets $
 -- * Since a block may reference wallet accounts that do not exist yet locally,
 -- we need to create such 'missing' accounts. (An Account might not exist locally
 -- if it was created on another node instance of this wallet).
+--
+-- * For every address encountered in the block outputs, create an HdAddress if it
+-- does not already exist.
 applyBlock :: (Map HdAccountId PrefilteredBlock, BlockMeta) -> Update DB ()
 applyBlock (blocksByAccount,meta) = runUpdateNoErrors $
     zoom dbHdWallets $
         forM_ (Map.toList blocksByAccount) $ \(accountId,prefBlock) -> do
-            mapUpdateErrors mustExist $
+            mapUpdateErrors createAccountErr $
                 createHdAccountIfNotExists accountId initAccountUtxo
 
-            zoomHdAccountId mustExist accountId $
+            mapUpdateErrors createAddressErr $
+                createHdAddresses (pfbAddrs prefBlock)
+
+            zoomHdAccountId unknownAccountErr accountId $
                 zoom hdAccountCheckpoints $
                     modify $ Spec.applyBlock (prefBlock,meta)
      where
          -- Accounts are discovered during wallet creation (if the account was given
-         -- a balance in the genesis block) or during ApplyBlock, otherwise. For accounts
+         -- a balance in the genesis block) or otherwise, during ApplyBlock. For accounts
          -- discovered during ApplyBlock, we can assume that there was no genesis utxo,
          -- hence we use empty initial utxo for such new accounts.
          initAccountUtxo = Map.empty
 
-         -- The call to `createHdAccountIfNotExists` may fail due to the parent HdRootId
-         -- of an HdAccountId not existing. When we `zoomHdAccountId` we can be sure that the
-         -- HdAccountId has been found or created.
-         mustExist :: forall a. a -> Void
-         mustExist _ = error "Failed to create an HdAccount due to UnknownHdAccountRoot"
+         unknownAccountErr :: UnknownHdAccount -> Void
+         unknownAccountErr e = error $ sformat ("UnknownHdAccount "%build) e
+
+         createAccountErr :: HD.CreateHdAccountError -> Void
+         createAccountErr e = error $ sformat ("CreateHdAccountError "%build) e
+
+         createAddressErr :: HD.CreateHdAddressError -> Void
+         createAddressErr e = error $ sformat ("CreateHdAddressError "%build) e
 
 -- | Switch to a fork
 --
@@ -159,15 +170,16 @@ switchToFork n blocks = runUpdateNoErrors $
 Wallet creation
 -------------------------------------------------------------------------------}
 
--- | Create an HdWallet with HdRoot and possibly HdAccounts.
+-- | Create an HdWallet with HdRoot, possibly with HdAccounts and HdAddresses.
 --
---  An HdAccount for each HdAccountId represented in 'utxoByAccount'.
+--  Given prefiltered utxo's, by account, create an HdAccount for each account,
+--  along with HdAddresses for all utxo outputs.
 createHdWallet :: HdRootId
                -> WalletName
                -> HasSpendingPassword
                -> AssuranceLevel
                -> InDb Core.Timestamp
-               -> Map HdAccountId Utxo
+               -> Map HdAccountId PrefilteredUtxo
                -> Update DB (Either HD.CreateHdWalletError ())
 createHdWallet rootId name spendingPassword assuranceLevel created utxoByAccount
     = runUpdate' . zoom dbHdWallets $ do
@@ -175,7 +187,14 @@ createHdWallet rootId name spendingPassword assuranceLevel created utxoByAccount
             $ void
             $ HD.createHdRoot rootId name spendingPassword assuranceLevel created
         mapUpdateErrors HD.CreateHdWalletAccountFailed
-            $ mapM_ (uncurry createHdAccount) $ Map.toList utxoByAccount
+            $ mapM_ createHdAccount' utxoByAccountL
+        mapUpdateErrors HD.CreateHdWalletAddressFailed
+            $ mapM_ createHdAddrs' utxoByAccountL
+    where
+        utxoByAccountL = Map.toList utxoByAccount
+
+        createHdAccount' (accId,(utxo,_))     = createHdAccount accId utxo
+        createHdAddrs'   (_,    (_   ,addrs)) = createHdAddresses addrs
 
 -- | Create an HdAccount for the given HdAccountId and Utxo.
 --
@@ -196,16 +215,29 @@ createHdAccount accountId utxo = HD.createHdAccount accountId newCheckpoint
              , _checkpointBlockMeta   = BlockMeta . InDb $ Map.empty
              }
 
--- | Create an HdAccount if it does not already exist
 createHdAccountIfNotExists :: HdAccountId
                            -> Utxo
                            -> Update' HdWallets HD.CreateHdAccountError ()
 createHdAccountIfNotExists accId initUtxo = do
-    exists <- zoom hdWalletsAccounts $
-                  gets $ IxSet.member accId
+    exists <- zoom hdWalletsAccounts $ gets (IxSet.member accId)
 
     unless exists $
         createHdAccount accId initUtxo
+
+createHdAddressIfNotExists :: HdAddressId
+                           -> Core.Address
+                           -> Update' HdWallets HD.CreateHdAddressError ()
+createHdAddressIfNotExists addressId address = do
+   exists <- zoom hdWalletsAddresses $ gets (IxSet.member addressId)
+
+   unless exists $
+       HD.createHdAddress addressId (InDb address)
+
+-- | Create a collection of HdAddresses (only create an address if it does not
+--   already exist)
+createHdAddresses :: [AddrWithId]
+                  -> Update' HdWallets HD.CreateHdAddressError ()
+createHdAddresses = mapM_ (uncurry createHdAddressIfNotExists)
 
 {-------------------------------------------------------------------------------
   Wrap HD C(R)UD operations

@@ -22,7 +22,7 @@ import           Formatting (bprint, build, (%))
 import           Pos.Txp (Utxo, formatUtxo)
 import           Pos.Core (HasConfiguration, AddressHash)
 import           Pos.Crypto (EncryptedSecretKey, PublicKey)
-import           Pos.Util.Chrono
+import           Pos.Core.Chrono
 
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 

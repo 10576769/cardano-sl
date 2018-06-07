@@ -60,6 +60,9 @@ data CreateHdWalletError =
     -- | Could not create an HdAccount
   | CreateHdWalletAccountFailed CreateHdAccountError
 
+    -- | Could not create an HdAddress
+  | CreateHdWalletAddressFailed CreateHdAddressError
+
 deriveSafeCopy 1 'base ''CreateHdRootError
 deriveSafeCopy 1 'base ''CreateHdAccountError
 deriveSafeCopy 1 'base ''CreateHdAddressError
@@ -171,6 +174,12 @@ instance Buildable CreateHdAccountError where
         = bprint ("CreateHdAccountError::CreateHdAccountUnknownRoot "%build) rootId
     build (CreateHdAccountExists accountId)
         = bprint ("CreateHdAccountError::CreateHdAccountExists "%build) accountId
+
+instance Buildable CreateHdAddressError where
+  build (CreateHdAddressUnknown unknownRoot)
+      = bprint ("CreateHdAddressUnknown: "%build) unknownRoot
+  build (CreateHdAddressExists addressId)
+      = bprint ("CreateHdAddressExists: "%build) addressId
 
 instance Buildable CreateHdWalletError where
     build = bprint ("CreateHdWalletError::"%build)

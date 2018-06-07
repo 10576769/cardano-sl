@@ -32,6 +32,7 @@ module Cardano.Wallet.Kernel.DB.HdWallet (
   , hdRootCreatedAt
   , hdAccountId
   , hdAccountName
+  , hdAccountCurrentCheckpoint
   , hdAccountCheckpoints
   , hdAddressId
   , hdAddressAddress
@@ -226,6 +227,9 @@ hdAddressAccountId = hdAddressId . hdAddressIdParent
 hdAddressRootId :: Lens' HdAddress HdRootId
 hdAddressRootId = hdAddressAccountId . hdAccountIdParent
 
+hdAccountCurrentCheckpoint :: Lens' HdAccount Checkpoint
+hdAccountCurrentCheckpoint = hdAccountCheckpoints . currentCheckpoint
+
 {-------------------------------------------------------------------------------
   Unknown identifiers
 -------------------------------------------------------------------------------}
@@ -381,6 +385,14 @@ instance Buildable HdAccountIx where
 instance Buildable HdAccountId where
     build (HdAccountId parentId accountIx)
         = bprint ("HdAccountId: "%build%", "%build) parentId accountIx
+
+instance Buildable HdAddressIx where
+    build (HdAddressIx ix)
+        = bprint ("HdAddressIx: "%build) ix
+
+instance Buildable HdAddressId where
+    build (HdAddressId parentId addressIx)
+        = bprint ("HdAddressId: "%build%", "%build) parentId addressIx
 
 instance Buildable UnknownHdAccount where
     build (UnknownHdAccountRoot rootId)

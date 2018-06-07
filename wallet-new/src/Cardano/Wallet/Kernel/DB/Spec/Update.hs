@@ -17,7 +17,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 
 import qualified Pos.Core as Core
-import           Pos.Util.Chrono (OldestFirst(..))
+import           Pos.Core.Chrono (OldestFirst(..))
 import           Pos.Crypto (hash)
 import           Pos.Txp (Utxo)
 

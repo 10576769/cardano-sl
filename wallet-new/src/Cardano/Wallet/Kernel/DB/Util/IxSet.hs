@@ -15,9 +15,9 @@ module Cardano.Wallet.Kernel.DB.Util.IxSet (
   , ixList
     -- * Queries
   , getEQ
-  , getOne
   , member
   , size
+  , toList'
     -- * Construction
   , fromList
   , omap
@@ -149,14 +149,14 @@ instance Foldable IxSet where
 getEQ :: (Indexable a, IsIndexOf ix a) => ix -> IxSet a -> IxSet a
 getEQ ix = WrapIxSet . IxSet.getEQ ix . unwrapIxSet
 
-getOne :: Indexable a => IxSet a -> Maybe a
-getOne xs = unwrapOrdByPrimKey <$> (IxSet.getOne . unwrapIxSet) xs
-
 member :: (HasPrimKey a, Indexable a) => PrimKey a -> IxSet a -> Bool
 member pk = isJust . view (Lens.at pk)
 
 size :: IxSet a -> Int
 size = IxSet.size . unwrapIxSet
+
+toList' :: IxSet a -> [a]
+toList' = coerce . IxSet.toList . unwrapIxSet
 
 {-------------------------------------------------------------------------------
   Construction

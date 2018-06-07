@@ -44,7 +44,7 @@ import           Data.Acid.Advanced (query', update')
 import           Cardano.Wallet.Kernel.Diffusion (WalletDiffusion (..))
 import           Cardano.Wallet.Kernel.PrefilterTx (PrefilteredBlock (..)
                                                   , prefilterUtxo, prefilterBlock)
-import           Cardano.Wallet.Kernel.Types(WalletId (..), WalletESKs, accountToWalletId)
+import           Cardano.Wallet.Kernel.Types(WalletId (..), WalletESKs)
 
 import           Cardano.Wallet.Kernel.DB.HdWallet
 import           Cardano.Wallet.Kernel.DB.Resolved (ResolvedBlock)
@@ -58,7 +58,6 @@ import           Cardano.Wallet.Kernel.DB.BlockMeta (BlockMeta (..))
 import qualified Cardano.Wallet.Kernel.DB.HdWallet as HD
 import qualified Cardano.Wallet.Kernel.DB.HdWallet.Read as HD
 import           Cardano.Wallet.Kernel.DB.InDb
-import           Cardano.Wallet.Kernel.DB.Spec as Spec
 import qualified Cardano.Wallet.Kernel.DB.Spec.Read as Spec
 
 import           Pos.Core (Timestamp (..), TxAux (..), AddressHash, Coin)
@@ -106,7 +105,7 @@ bracketPassiveWallet _walletLogMessage f =
                   f)
 
 {-------------------------------------------------------------------------------
-  Wallet ESKs - getters/setters
+  Manage the WalletESKs Map
 -------------------------------------------------------------------------------}
 
 -- | Insert an ESK, indexed by WalletId, to the WalletESK map
@@ -117,11 +116,6 @@ insertWalletESK pw wid esk
 
 withWalletESKs :: forall a. PassiveWallet -> (WalletESKs -> IO a) -> IO a
 withWalletESKs pw = withMVar (pw ^. walletESKs)
-
-findWalletESK :: PassiveWallet -> WalletId -> IO (Maybe EncryptedSecretKey)
-findWalletESK pw wid
-    = withWalletESKs pw $ \esks ->
-        return $ Map.lookup wid esks
 
 {-------------------------------------------------------------------------------
   Wallet Initialisers
@@ -163,19 +157,20 @@ createWalletHdRnd :: PassiveWallet
                   -> Utxo
                   -> IO [HdAccountId]
 createWalletHdRnd pw@PassiveWallet{..} name spendingPassword assuranceLevel (pk,esk) utxo = do
-    let utxoByAccount = prefilterUtxo rootId esk utxo
     created <- InDb <$> getCurrentTimestamp
-
     res <- update' _wallets
            $ CreateHdWallet rootId name spendingPassword assuranceLevel created utxoByAccount
-    case res of
-        Left e' -> -- fails if the HdRootId already exists (see `CreateHdWalletError`)
-            fail' e'
-        Right _ -> do
-            insertWalletESK pw (WalletIdHdRnd rootId) esk
-            return $ Map.keys utxoByAccount
+
+    -- fails if the HdRootId already exists (see `CreateHdWalletError`)
+    either fail' success res
     where
-        rootId = HD.HdRootId . InDb $ pk
+        utxoByAccount = prefilterUtxo rootId esk utxo
+
+        rootId        = HD.HdRootId . InDb $ pk
+        walletId      = WalletIdHdRnd rootId
+        accountIds    = Map.keys utxoByAccount
+
+        success _arg = insertWalletESK pw walletId esk >> return accountIds
 
 -- TODO find a home for this
 -- (NOTE: we are abandoning the 'Mockable time' strategy of the Cardano code base)
@@ -257,25 +252,27 @@ newPending ActiveWallet{..} accountId tx
   = update' (walletPassive ^. wallets) $ NewPending accountId (InDb tx)
 
 {-------------------------------------------------------------------------------
-  Wallet Account API
+  Wallet Account read-only API
 -------------------------------------------------------------------------------}
 
--- | Get the current checkpoint for an accountId from a database Snapshot, then
---   apply the given pure function to the checkpoint
-accountQuery :: forall a. PassiveWallet -> HdAccountId -> (Checkpoint -> a) -> IO a
-accountQuery pw accountId f = do
-    db <- query' (pw ^. wallets) Snapshot
-    let checkpoint = readHdAccountCheckpoint $ db ^. dbHdWallets
-    either fail' (return . f) checkpoint
-    where
-        readHdAccountCheckpoint :: HdWallets -> Either UnknownHdAccount Checkpoint
-        readHdAccountCheckpoint = fmap (view Spec.currentCheckpoint . _hdAccountCheckpoints) . HD.readHdAccount accountId
-
 accountUtxo :: PassiveWallet -> HdAccountId -> IO Utxo
-accountUtxo pw accountId =
-    accountQuery pw accountId Spec.accountUtxo
+accountUtxo pw accountId = do
+    db <- query' (pw ^. wallets) Snapshot
+
+    let checkpoint = HD.readHdAccountCurrentCheckpoint accountId (db ^. dbHdWallets)
+        utxo'      = Spec.accountUtxo <$> checkpoint
+
+    either unknownAccountErr return utxo'
 
 accountTotalBalance :: PassiveWallet -> HdAccountId -> IO Coin
 accountTotalBalance pw accountId = do
-    (Just esk) <- findWalletESK pw (accountToWalletId accountId)
-    accountQuery pw accountId (Spec.accountTotalBalance esk accountId)
+    db <- query' (pw ^. wallets) Snapshot
+
+    let checkpoint   = HD.readHdAccountCurrentCheckpoint accountId (db ^. dbHdWallets)
+        ourAddrs     = HD.readAddressSetByAccountId      accountId (db ^. dbHdWallets)
+        totalBalance = Spec.accountTotalBalance <$> ourAddrs <*> checkpoint
+
+    either unknownAccountErr return totalBalance
+
+unknownAccountErr :: forall a. UnknownHdAccount -> IO a
+unknownAccountErr = error . sformat build
