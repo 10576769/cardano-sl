@@ -15013,9 +15013,11 @@ license = stdenv.lib.licenses.mit;
 , cryptonite-openssl
 , hedgehog
 , pvss
+, serokell-util
 , stdenv
 , time-units
 , universum
+, unordered-containers
 , vector
 }:
 mkDerivation {
@@ -15037,8 +15039,10 @@ cryptonite
 cryptonite-openssl
 hedgehog
 pvss
+serokell-util
 time-units
 universum
+unordered-containers
 vector
 ];
 libraryToolDepends = [
