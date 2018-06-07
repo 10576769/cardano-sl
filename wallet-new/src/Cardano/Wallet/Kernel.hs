@@ -269,7 +269,7 @@ accountTotalBalance pw accountId = do
     db <- query' (pw ^. wallets) Snapshot
 
     let checkpoint   = HD.readHdAccountCurrentCheckpoint accountId (db ^. dbHdWallets)
-        ourAddrs     = HD.readAddressSetByAccountId      accountId (db ^. dbHdWallets)
+        ourAddrs     = HD.readAddressesByAccountId       accountId (db ^. dbHdWallets)
         totalBalance = Spec.accountTotalBalance <$> ourAddrs <*> checkpoint
 
     either unknownAccountErr return totalBalance

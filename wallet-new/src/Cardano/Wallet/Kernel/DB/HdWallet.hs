@@ -291,7 +291,7 @@ instance HasPrimKey HdAddress where
 
 type HdRootIxs    = '[]
 type HdAccountIxs = '[HdRootId]
-type HdAddressIxs = '[HdRootId, HdAccountId]
+type HdAddressIxs = '[HdRootId, HdAccountId, Core.Address]
 
 type instance IndicesOf HdRoot    = HdRootIxs
 type instance IndicesOf HdAccount = HdAccountIxs
@@ -311,6 +311,7 @@ instance IxSet.Indexable (HdAddressId ': HdAddressIxs)
     indices = ixList
                 (ixFun ((:[]) . view hdAddressRootId))
                 (ixFun ((:[]) . view hdAddressAccountId))
+                (ixFun ((:[]) . view (hdAddressAddress . fromDb)))
 
 {-------------------------------------------------------------------------------
   Zoom to parts of a HD wallet

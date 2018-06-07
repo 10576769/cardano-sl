@@ -17,7 +17,6 @@ module Cardano.Wallet.Kernel.DB.Util.IxSet (
   , getEQ
   , member
   , size
-  , toList'
     -- * Construction
   , fromList
   , omap
@@ -154,9 +153,6 @@ member pk = isJust . view (Lens.at pk)
 
 size :: IxSet a -> Int
 size = IxSet.size . unwrapIxSet
-
-toList' :: IxSet a -> [a]
-toList' = coerce . IxSet.toList . unwrapIxSet
 
 {-------------------------------------------------------------------------------
   Construction

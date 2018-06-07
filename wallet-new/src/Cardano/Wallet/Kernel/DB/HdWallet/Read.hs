@@ -22,7 +22,6 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Read (
   , readAccountsByRootId
   , readAddressesByRootId
   , readAddressesByAccountId
-  , readAddressSetByAccountId
     -- | Single wallets/accounts/addresses
   , readHdRoot
   , readHdAccount
@@ -32,14 +31,11 @@ module Cardano.Wallet.Kernel.DB.HdWallet.Read (
 
 import           Universum
 
-import qualified Data.Set as Set
-
 import           Control.Lens (at)
 
-import           Pos.Core (Address, Coin, sumCoins)
+import           Pos.Core (Coin, sumCoins)
 
 import           Cardano.Wallet.Kernel.DB.HdWallet
-import           Cardano.Wallet.Kernel.DB.InDb(InDb (..))
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
 import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
@@ -123,13 +119,6 @@ readAddressesByAccountId :: HdAccountId -> HdQueryErr UnknownHdAccount (IxSet Hd
 readAddressesByAccountId accId =
       check (readHdAccount accId)
     $ IxSet.getEQ accId . readAllHdAddresses
-
--- | Set of raw addresses for the given account
-readAddressSetByAccountId :: HdAccountId -> HdQueryErr UnknownHdAccount (Set Address)
-readAddressSetByAccountId accId db =
-    toAddressSet <$> readAddressesByAccountId accId db
-    where
-        toAddressSet = Set.fromList . map (_fromDb . _hdAddressAddress) . IxSet.toList'
 
 {-------------------------------------------------------------------------------
   Information about a single wallet/address/account

@@ -8,7 +8,6 @@ module Cardano.Wallet.Kernel.DB.Spec.Read (
 import           Universum
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
 
 import qualified Pos.Core as Core
 import           Pos.Core.Txp (TxOut (..), TxOutAux (..))
@@ -18,21 +17,27 @@ import           Cardano.Wallet.Kernel.DB.InDb
 import           Cardano.Wallet.Kernel.DB.Spec
 import           Cardano.Wallet.Kernel.DB.Spec.Util
 
+import           Cardano.Wallet.Kernel.DB.Util.IxSet (IxSet)
+import qualified Cardano.Wallet.Kernel.DB.Util.IxSet as IxSet
+import           Cardano.Wallet.Kernel.DB.HdWallet (HdAddress)
+
 {-------------------------------------------------------------------------------
   An address is considered "ours" if it belongs to the set of "our" addresses.
   The following pure functions are given the set of "our" addresses to enable filtering.
 -------------------------------------------------------------------------------}
 
-ourAddr :: Set Core.Address -> Core.Address -> Bool
-ourAddr addrs addr = Set.member addr addrs
+ourAddr :: IxSet HdAddress -> Core.Address -> Bool
+ourAddr addrs addr =
+    1 == (IxSet.size $
+            IxSet.getEQ addr addrs)
 
 -- | Determines whether the transaction output address is one of "ours"
-ourTxOut :: Set Core.Address -> TxOutAux -> Bool
+ourTxOut :: IxSet HdAddress -> TxOutAux -> Bool
 ourTxOut addrs tx
     = ourAddr addrs (txOutAddress . toaOut $ tx)
 
 -- | Filters the given utxo by selecting only utxo outputs that are "ours"
-ourUtxo :: Set Core.Address -> Utxo -> Utxo
+ourUtxo :: IxSet HdAddress -> Utxo -> Utxo
 ourUtxo addrs utxo
     = Map.filter (ourTxOut addrs) utxo
 
@@ -74,7 +79,7 @@ accountChange ours
 --
 -- NOTE: computing 'total balance' requires filtering "our" addresses, which requires
 --       the full set of addresses for this Account Checkpoint
-accountTotalBalance :: Set Core.Address -> Checkpoint -> Core.Coin
+accountTotalBalance :: IxSet HdAddress -> Checkpoint -> Core.Coin
 accountTotalBalance addrs c
     = add' availableBalance changeBalance
     where
