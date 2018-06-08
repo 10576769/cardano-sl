@@ -11,8 +11,8 @@ import           Test.QuickCheck (arbitrary)
 import qualified Test.QuickCheck.Gen as QC
 import qualified Test.QuickCheck.Random as QC
 
-import           Pos.Core (MainBlock, HasProtocolConstants, HasProtocolMagic,
-                           HasGenesisHash, ProtocolConstants, ProtocolMagic)
+import           Pos.Core (HasGenesisHash, HasProtocolConstants, MainBlock, ProtocolConstants,
+                           ProtocolMagic)
 -- Also brings in the 'Arbitrary' instance for 'MainBlock'.
 import           Pos.Arbitrary.Block (genMainBlock)
 
@@ -20,7 +20,6 @@ import           Pos.Arbitrary.Block (genMainBlock)
 -- These require magical configurations.
 generateMainBlockWithConfiguration
     :: ( HasProtocolConstants
-       , HasProtocolMagic
        , HasGenesisHash
        )
     => Int -- ^ Seed for random generator.

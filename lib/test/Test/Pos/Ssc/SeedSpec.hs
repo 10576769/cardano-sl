@@ -20,13 +20,12 @@ import           Test.QuickCheck (Property, choose, counterexample, generate, io
 import           Test.QuickCheck.Property (failed, succeeded)
 
 import           Pos.Binary
-import           Pos.Core (AddressHash, HasConfiguration, SharedSeed (..), StakeholderId,
-                           addressHash, mkCoin)
+import           Pos.Core (AddressHash, SharedSeed (..), StakeholderId, addressHash, mkCoin)
 import           Pos.Core.Ssc (Commitment (..), CommitmentsMap, Opening (..), getCommShares,
                                getCommitmentsMap, mkCommitmentsMap)
-import           Pos.Crypto (DecShare, PublicKey, SecretKey, SignTag (SignCommitment), Threshold,
-                             VssKeyPair, VssPublicKey, decryptShare, protocolMagic, sign, toPublic,
-                             toVssPublicKey)
+import           Pos.Crypto (DecShare, ProtocolMagic, PublicKey, SecretKey,
+                             SignTag (SignCommitment), Threshold, VssKeyPair, VssPublicKey,
+                             decryptShare, sign, toPublic, toVssPublicKey)
 import           Pos.Ssc (SscSeedError (..), calculateSeed, genCommitmentAndOpening,
                           secretToSharedSeed, vssThreshold)
 
@@ -38,7 +37,7 @@ getPubAddr :: SecretKey -> AddressHash PublicKey
 getPubAddr = addressHash . toPublic
 
 spec :: Spec
-spec = withDefConfiguration $ do
+spec = withDefConfiguration $ \pm -> do
     -- note that we can't make max size larger than 50 without changing it in
     -- Test.Pos.Configuration as well
     let smaller = modifyMaxSize (const 40) . modifyMaxSuccess (const 30)
@@ -46,18 +45,18 @@ spec = withDefConfiguration $ do
         prop
             "finds the seed when all openings are present" $
             do n <- sized $ \size -> choose (4, max size 4)
-               return $ recoverSecretsProp n n 0 0
+               return $ recoverSecretsProp pm n n 0 0
         prop
             "finds the seed when all shares are present" $
             do n <- sized $ \size -> choose (4, max size 4)
-               return $ recoverSecretsProp n 0 n 0
+               return $ recoverSecretsProp pm n 0 n 0
         prop
             "finds the seed when all secrets can be recovered" $
             do n <- sized $ \size -> choose (4, max size 4)
                n_overlap <- choose (0, n)
                n_openings <- choose (n_overlap, n)
                let n_shares = n - n_openings + n_overlap
-               return $ recoverSecretsProp n n_openings n_shares n_overlap
+               return $ recoverSecretsProp pm n n_openings n_shares n_overlap
         -- [CSL-50]: we are in process of thinking about this property
         -- prop
         --     "fails to find the seed when some secrets can't be recovered" $
@@ -87,13 +86,13 @@ spec = withDefConfiguration $ do
 -- * All nodes have sent -shares they have received- to the blockchain.
 --   'n' shares are required to recover a secret.
 recoverSecretsProp
-    :: HasConfiguration
-    => Int         -- ^ Number of parties
+    :: ProtocolMagic
+    -> Int         -- ^ Number of parties
     -> Int         -- ^ How many have sent an opening
     -> Int         -- ^ How many have sent shares
     -> Int         -- ^ How many have sent both (the “overlap” parameter)
     -> Property
-recoverSecretsProp n n_openings n_shares n_overlap
+recoverSecretsProp _ n n_openings n_shares n_overlap
     | any (< 0) [n, n_openings, n_shares, n_overlap] =
           error "recoverSecretsProp: negative"
     | n < 4 =
@@ -111,7 +110,7 @@ recoverSecretsProp n n_openings n_shares n_overlap
     | n - n_openings - n_shares + n_overlap < 0 =
           error "recoverSecretsProp: overlap condition"
 
-recoverSecretsProp n n_openings n_shares n_overlap = ioProperty $ do
+recoverSecretsProp pm n n_openings n_shares n_overlap = ioProperty $ do
     let threshold = vssThreshold n
     (keys', vssKeys, comms, opens) <- generateKeysAndMpc threshold n
     let des = fromBinary
@@ -127,7 +126,7 @@ recoverSecretsProp n n_openings n_shares n_overlap = ioProperty $ do
     haveSentShares <- generate $
         (haveSentBoth ++) <$>
         sublistN (n_shares - n_overlap) (keys' \\ haveSentOpening)
-    let commitmentsMap = mkCommitmentsMap' keys' comms
+    let commitmentsMap = mkCommitmentsMap' pm keys' comms
     let vssMap = mkVssMap keys' vssKeys
     let richmen = getCommitmentsMap commitmentsMap & each .~ mkCoin 1000
     let openingsMap = HM.fromList
@@ -214,12 +213,13 @@ generateKeysAndMpc threshold n = do
         unzip <$> replicateM n (genCommitmentAndOpening threshold lvssPubKeys)
     return (keys', NE.fromList vssKeys, comms, opens)
 
-mkCommitmentsMap' :: HasConfiguration => [SecretKey] -> [Commitment] -> CommitmentsMap
-mkCommitmentsMap' keys' comms =
+mkCommitmentsMap'
+    :: ProtocolMagic -> [SecretKey] -> [Commitment] -> CommitmentsMap
+mkCommitmentsMap' pm keys' comms =
     mkCommitmentsMap $ do
         (sk, comm) <- zip keys' comms
         let epochIdx = 0  -- we don't care here
-        let sig = sign protocolMagic SignCommitment sk (epochIdx, comm)
+        let sig = sign pm SignCommitment sk (epochIdx, comm)
         return (toPublic sk, comm, sig)
 
 mkVssMap :: [SecretKey]

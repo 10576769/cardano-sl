@@ -15,7 +15,7 @@ import           Test.Pos.Binary.Helpers (safeCopyTest)
 import           Test.Pos.Configuration (withDefConfiguration)
 
 spec :: Spec
-spec = withDefConfiguration $ describe "Ssc" $ do
+spec = withDefConfiguration $ \_ -> describe "Ssc" $ do
     describe "SafeCopy instances" $ do
         safeCopyTest @Ssc.Commitment
         safeCopyTest @Ssc.CommitmentSignature

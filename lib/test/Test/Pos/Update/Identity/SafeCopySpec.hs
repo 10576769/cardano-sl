@@ -14,7 +14,7 @@ import           Test.Pos.Binary.Helpers (safeCopyTest)
 import           Test.Pos.Configuration (withDefConfiguration)
 
 spec :: Spec
-spec = withDefConfiguration $ describe "Update system" $ do
+spec = withDefConfiguration $ \_ -> describe "Update system" $ do
     describe "SafeCopy instances" $ do
         safeCopyTest @U.UpdateProposal
         safeCopyTest @U.UpdateVote

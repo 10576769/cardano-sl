@@ -27,8 +27,8 @@ import           Pos.Core (Coin, EpochIndex, EpochOrSlot (..), HasConfiguration,
 import           Pos.Core.Ssc (Commitment, CommitmentSignature, CommitmentsMap (..), InnerSharesMap,
                                Opening, OpeningsMap, SharesMap, SignedCommitment,
                                mkCommitmentsMapUnsafe)
-import           Pos.Crypto (DecShare, PublicKey, SecretKey, SignTag (SignCommitment),
-                             protocolMagic, sign, toPublic)
+import           Pos.Crypto (DecShare, ProtocolMagic, PublicKey, SecretKey,
+                             SignTag (SignCommitment), sign, toPublic)
 import           Pos.Lrc.Types (RichmenStakes)
 import           Pos.Ssc (MultiRichmenStakes, PureTossWithEnv, SscGlobalState (..),
                           SscVerifyError (..), VssCertData (..), checkCertificatesPayload,
@@ -43,12 +43,12 @@ import           Test.Pos.Util.QuickCheck.Property (qcElem, qcFail, qcIsRight)
 import           Test.Pos.Configuration (withDefConfiguration)
 
 spec :: Spec
-spec = withDefConfiguration $ describe "Ssc.Base" $ do
+spec = withDefConfiguration $ \pm -> describe "Ssc.Base" $ do
     describe "verifyCommitment" $ do
         prop description_verifiesOkComm verifiesOkComm
     describe "verifyCommitmentSignature" $ do
-        prop description_verifiesOkCommSig verifiesOkCommSig
-        prop description_notVerifiesBadSig notVerifiesBadCommSig
+        prop description_verifiesOkCommSig (verifiesOkCommSig pm)
+        prop description_notVerifiesBadSig (notVerifiesBadCommSig pm)
     describe "verifyOpening" $ do
         prop description_verifiesOkOpening verifiesOkOpening
         prop description_notVerifiesBadOpening notVerifiesBadOpening
@@ -109,14 +109,16 @@ verifiesOkComm :: CommitmentOpening -> Bool
 verifiesOkComm CommitmentOpening{..} =
     verifyCommitment coCommitment
 
-verifiesOkCommSig :: HasConfiguration => SecretKey -> Commitment -> EpochIndex -> Bool
-verifiesOkCommSig sk comm epoch =
-    let commSig = (toPublic sk, comm, sign protocolMagic SignCommitment sk (epoch, comm))
-    in verifyCommitmentSignature epoch commSig
+verifiesOkCommSig
+    :: ProtocolMagic -> SecretKey -> Commitment -> EpochIndex -> Bool
+verifiesOkCommSig pm sk comm epoch =
+    let commSig = (toPublic sk, comm, sign pm SignCommitment sk (epoch, comm))
+    in verifyCommitmentSignature pm epoch commSig
 
-notVerifiesBadCommSig :: HasConfiguration => BadSignedCommitment -> EpochIndex -> Bool
-notVerifiesBadCommSig (getBadSignedC -> badSignedComm) epoch =
-    not $ verifyCommitmentSignature epoch badSignedComm
+notVerifiesBadCommSig
+    :: ProtocolMagic -> BadSignedCommitment -> EpochIndex -> Bool
+notVerifiesBadCommSig pm (getBadSignedC -> badSignedComm) epoch =
+    not $ verifyCommitmentSignature pm epoch badSignedComm
 
 verifiesOkOpening :: CommitmentOpening -> Bool
 verifiesOkOpening CommitmentOpening{..} =
